@@ -1,32 +1,38 @@
-# Hack to ofRandom()
+# OpenFrameworks is beta
 
-OK, so kyle suggests [it is not floating point accuracy, but the accuracy of the division][3], and proposes a simple fix, mainly that we check if the result returned is equal to max, and if it is, return a new random number. The likelihood of two random numbers in a row both 1.0 (in the case of ofRandomuf()) is super low, so we probably only will recurse one level.
-
-Relevant change is:
+So arturo proposes another, complete fix: changing the return type from float to double, like so
 
 ```c++
-if(result == high) {
-    return ofRandom(x, y);
-} else {
-    return result;
+double ofRandomuf() {
+    return rand() / double(RAND_MAX + 1.0);
 }
 ```
 
-and you can run and observe this in **ofMathHack.cpp** `g++ ofMathHack.cpp -o hack && ./hack`.
+Seems logical. But Kyle defeats this idea with a crafty test case that implies that arturo's fix really 
+just will push the bug onto the users when they try and access the double as a float (**ofMath.cpp**):
 
-![recursion solves everything](recurse.png)
+```c++
+#include <iostream>
+int main() {
+  double asDouble = RAND_MAX / double(RAND_MAX + 1.0);
+  if(asDouble==1.0) printf("double equals 1.0\n");
+  if(asDouble==1.0f) printf("double equals 1.0f\n");
+  // lets make it a float!
+  float asSingle = asDouble;
+  if(asSingle==1.0) printf("float equals 1.0\n");
+  if(asSingle==1.0f) printf("float equals 1.0f\n");
+}
+```
 
-This time, you will have to press control+c to kill the program - it works!
+Testing this with `g++ ofMath.cpp -o double && ./double` exposes the fragility of floating point, once again.
 
-Case solved, right?
+![double](double.png)
 
-Maybe... but 2bit is not satisfied. It is a band-aid fix. In his heart, he knows there should be a correct way to always return a random floating point value between min and max, excluding max, without having to re-run ofRandom(min, max). Maybe there are other reasons not to go with the recursive solution (if you can think of any, please comment!).
-
-So the saga continues, as arturoc enters the scene...
+A smaller issue is that changing the api is not very nice, even for a pre-1.0 system like openFrameworks. So a new approach needs to be taken.
 
 # Next
 
-To move onto the next step, do `git checkout openframeworks-is-beta`
+To move onto the next step, do `git checkout adventures-with-epsilon`
 
 # Overview
 
