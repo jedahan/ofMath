@@ -1,48 +1,70 @@
-# The Problem
+# Numbers and Computers
 
-About one week ago, [2bit](https://github.com/2bbb) proposed a small patch for the implementation of the random number generator for [openFrameworks](https://openframeworks.cc):
+Integers are the whole numbers we know and love - 0, 1, 2, 3, 4.... these numbers are easy to represent in computer memory. Most computers these days are '64 bit' so we can count in a single int from 0 all the way up to 2^64 -1, and every whole number between.
 
-[pull request #3482](https://github.com/2bbb/openFrameworks/commit/24a300ad3fe6a6594b2e3754f76a4e96ea2086d9)
+However, we would be really limited in expression if we could only use integers when programming.
 
-2bit had discovered that sometimes ofRandomuf returns 1.0, when the documentation says it should always return a positive number less than 1.0
+Another set of numbers that are super useful are [Real Numbers "](https://en.wikipedia.org/wiki/Real_number). Real numbers let us represent fractional distances, which are especially useful in a creative coding framework like openFrameworks. Numbers between 0 and 1 ( 0.5, 0.99, 0.1415161718...) are beautiful, and very useful for scaling, animation, reasoning about behaviour, and a whole bunch of other things.
 
-Even more interesting than the issue of incorrect range, is the source of the problem.
+However, there is a problem with representing and range of real numbers - real numbers can be infinitely long! And our computer only has 64 bits to work with!
 
-On some platforms, like osx and linux, where RAND_MAX is very high, RAND_MAX is equal to RAND_MAX + 1.0f!
-
-Let me repeat, because that sound should raise some alarm bells...
-
-*   RAND_MAX == RAND_MAX + 1.0f
-
-put another way
-
-*   X == X+1
-
-How could this even happen? I don't believe it, and neither should you! Let's see if your OS is susceptable, by compiling and running ofMath.cpp, which looks like this:
+So, what to do? There is a standard, [IEEE754: Floating point for Modern Computers](https://en.wikipedia.org/wiki/Floating_point) , that defines how to map 2^64 different numbers to a RANGE of real numbers. The smaller the range, the more precise we can be. The larger the range, the more "holes" in what numbers we can represent. A fun bit of code to show when this hole gives an issue:
 
 ```c++
-    #include <iostream>
+#include <iostream>
 
-    int main() {
-      if(RAND_MAX == RAND_MAX + 1.0f) {
-        printf("omg all of math is wrong\n");
-      } else {
-        printf("phew we are safe...for now\n");
-      }
-    }
+int main() {
+  float a = 0.1;
+  float b = 0.2;
+  if(a + b == 0.3){
+    printf("nothing to see here...\n");
+  } else {
+    printf("what. is. going. on. whyyyyyyyy.\n");
+  }
+}
 ```
 
-In no sane world, would we ever see anything besides "phew we are safe...".
+You can guess what the output is:
 
-![omg all math is wrong](output.png)
+![math is hard](output.png)
 
-So I guess my laptop is no sane world, and maybe yours is crazy too
 
-If this is true, a whole bunch of stuff is broken. So let's talk about computer numbers to understand why this happens
+## Learning Floating Point with GDB
+
+Inspired by Alan O'Donnell's [Learning C with GDB](https://www.recurse.com/blog/5-learning-c-with-gdb#footnote_p5f1),
+(thank you so much Alan!), let's look at what a and b REALLY are :)
+
+Note: if you are on osx, you may have to do a silly dance to get gdb working. After installing via `brew install gdb`, I followed the
+steps [outlined here](http://wiki.lazarus.freepascal.org/GDB_on_OS_X_Mavericks_and_Xcode_5#Codesigning_gdb)
+
+    g++ -g ofMath.cpp && gdb a.out
+    GNU gdb (GDB) 7.9
+    ...snip...
+    (gdb) break main
+    Breakpoint 1 at 0x100000ec7: file ofMath.cpp, line 4
+    (gdb) run
+    ...snip...
+    Breakpoint 1, main () at ofMath.cpp:4
+    4      float a = 0.1;
+    (gdb) next
+    5      float b = 0.2;
+    (gdb) print a
+    $1 = 0.100000001
+    (gdb) next
+    6      if(a + b == 0.3){
+    (gdb) print b
+    $2 = 0.200000003
+    (gdb) print 0.1 + 0.2
+    $3 = 0.29999999999999993
+
+
+Welp! That was fun! I recommend looking at the byte representation and learning about IEEE754, and if there is something neat or informative please send a pull request!
+
+So now that we know maybe why x can equal x + 1, let's get back to the original pull request : making it so that ofRandomuf() returns floating point numbers over and including 0 but less than 1.
 
 # Next
 
-To move onto the next step, do `git checkout floating-point-is-hard`
+To move onto the next step, do `git checkout first-fix`
 
 # Overview
 
