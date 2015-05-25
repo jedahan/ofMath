@@ -1,1 +1,7 @@
 a.out*
+*dSYM
+.DS_Store
+fixed
+original
+test
+*swp

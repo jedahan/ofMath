@@ -1,70 +1,85 @@
-# Numbers and Computers
+# The First Patch...
 
-Integers are the whole numbers we know and love - 0, 1, 2, 3, 4.... these numbers are easy to represent in computer memory. Most computers these days are '64 bit' so we can count in a single int from 0 all the way up to 2^64 -1, and every whole number between.
+So the error that 2bit encountered with ofRandomuf() is that sometimes it returns 1.00000... and ofRandomuf() should only return numbers from 0 (including 0) up to 1 (not including 1). kylemcdonald comes up with a test case, included as **ofMain.cpp**, so let's run it on the original code without 2bits modifications. Remember, you can press control+c to quit the program:
 
-However, we would be really limited in expression if we could only use integers when programming.
+The original, unmodified ofRandomuf() function...
 
-Another set of numbers that are super useful are [Real Numbers "](https://en.wikipedia.org/wiki/Real_number). Real numbers let us represent fractional distances, which are especially useful in a creative coding framework like openFrameworks. Numbers between 0 and 1 ( 0.5, 0.99, 0.1415161718...) are beautiful, and very useful for scaling, animation, reasoning about behaviour, and a whole bunch of other things.
+```c++
+float ofRandomuf(){
+  return rand() / (RAND_MAX + 1.0f);
+}
+```
 
-However, there is a problem with representing and range of real numbers - real numbers can be infinitely long! And our computer only has 64 bits to work with!
+.. will sometimes return 1.000 (try `g++ original.cpp -o original && ./original`):
 
-So, what to do? There is a standard, [IEEE754: Floating point for Modern Computers](https://en.wikipedia.org/wiki/Floating_point) , that defines how to map 2^64 different numbers to a RANGE of real numbers. The smaller the range, the more precise we can be. The larger the range, the more "holes" in what numbers we can represent. A fun bit of code to show when this hole gives an issue:
+![original output](original.png)
+
+# ...has some bugs
+
+So 2bit's proposed fix, is to change `RAND_MAX + 1.0f` to `static_cast<double>(RAND_MAX) + 1.0`. The idea is that we will avoid floating point errors by using a higher precision type, a double. Which should be able to handle both a larger range of numbers, and more steps between each number.
+
+On 32 and 64 bit machines, a float is still 32 bits - the first bit is for sign + or -, the next 8 are for the exponent, and the next 23 are for the fraction.
+
+A double, as its name may imply, uses double the number of bits to represent whatever number we want. 1 sign, 11 exponent, 52 fraction. More range! More precision! Slower calculations!
+
+Heres a little exploration I did to see what the cast from float to double does:
+
+```c++
+include <iostream>
+int main() {
+  float max = RAND_MAX;
+  double dbl_max = static_cast<double>(RAND_MAX);
+}
+```
+
+and if we try debugging with `g++ -g test.cpp -o test && gdb test`, then `break main`, `next`, `next`, we can inspect the memory:
+
+```
+# interperet one word, 4 bytes, 32 bits, as a float (equivalent to x/1fw)
+(gdb) x/1w &max
+2.14748365e+09
+
+# interperet one biGword, 8 bytes, 64 bits, as a float (equivalent to x/1fg)
+(gdb) x/1g &dbl_max
+2147483647
+```
+
+Well I didn't notice until after typing this, that the numbers are actually different! Even if we are casting to a more precise type, we will introduce errors because the numbers we can represent are different! I am not sure why gdb prints a single precision floating point number with the floating point, and a double precision without. log2(2147483647) is very very close to 31. I'm kinda grabbing in the dark here, but if you have ideas as to why please share them. It probably has something to do with the actual IEEE754 specification, which I didn't read.
+
+Anyway, 2bits fix should work right? Let's look at this:
 
 ```c++
 #include <iostream>
 
 int main() {
-  float a = 0.1;
-  float b = 0.2;
-  if(a + b == 0.3){
-    printf("nothing to see here...\n");
-  } else {
-    printf("what. is. going. on. whyyyyyyyy.\n");
-  }
+  float max = RAND_MAX;
+  double double_max = static_cast<double>(RAND_MAX);
+  float max_plus_one = max + 1;
+  double double_max_plus_one = double_max + 1;
 }
 ```
 
-You can guess what the output is:
+![max and double max](double.png)
 
-![math is hard](output.png)
+Well that looks promising. So lets finally integrate our solution, with kyle's test case in **ofMainFixed.cpp**.
 
+    g++ ofMainFixed.cpp -o fixed && ./fixed
 
-## Learning Floating Point with GDB
+![fixed](fixed.png)
 
-Inspired by Alan O'Donnell's [Learning C with GDB](https://www.recurse.com/blog/5-learning-c-with-gdb#footnote_p5f1),
-(thank you so much Alan!), let's look at what a and b REALLY are :)
+Craaaap >\_< ... what happened?
 
-Note: if you are on osx, you may have to do a silly dance to get gdb working. After installing via `brew install gdb`, I followed the
-steps [outlined here](http://wiki.lazarus.freepascal.org/GDB_on_OS_X_Mavericks_and_Xcode_5#Codesigning_gdb)
+I think there are *two issues at hand*. The first is that the ofRandomuf() function returns a float, not a double. So it gets cast back....and loses some precision along the way.
 
-    g++ -g ofMath.cpp && gdb a.out
-    GNU gdb (GDB) 7.9
-    ...snip...
-    (gdb) break main
-    Breakpoint 1 at 0x100000ec7: file ofMath.cpp, line 4
-    (gdb) run
-    ...snip...
-    Breakpoint 1, main () at ofMath.cpp:4
-    4      float a = 0.1;
-    (gdb) next
-    5      float b = 0.2;
-    (gdb) print a
-    $1 = 0.100000001
-    (gdb) next
-    6      if(a + b == 0.3){
-    (gdb) print b
-    $2 = 0.200000003
-    (gdb) print 0.1 + 0.2
-    $3 = 0.29999999999999993
+But the second issue you can see if you try compiling and running **test.cpp** - the first cast to double actually lowers the max by 1, so adding 1 just keeps in the same.
 
+Bottom line I can see is **AVOID CASTS AT ALL COSTS** changing types is really tricky and finicky. This was meant to be a quick fix, but opened up a can of worms (maybe you know that feeling?).
 
-Welp! That was fun! I recommend looking at the byte representation and learning about IEEE754, and if there is something neat or informative please send a pull request!
-
-So now that we know maybe why x can equal x + 1, let's get back to the original pull request : making it so that ofRandomuf() returns floating point numbers over and including 0 but less than 1.
+So are we back to square one? I think so... let's see some new ideas when arturoc enters the scene...
 
 # Next
 
-To move onto the next step, do `git checkout first-fix`
+To move onto the next step, do `git checkout recursion-isnt-that-bad`
 
 # Overview
 

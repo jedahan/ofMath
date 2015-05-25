@@ -4,7 +4,7 @@
 #include <unistd.h>
 
 float ofRandomuf(){
-  return rand() / (RAND_MAX + 1.0f);
+  return rand() / static_cast<double>(RAND_MAX) + 1.0;
 }
 
 void ofRandomufTest() {
@@ -12,7 +12,7 @@ void ofRandomufTest() {
   while(true){
     for(int i = 0; i < 100000000; i++) {
       float x = ofRandomuf();
-      // x is supposed to always be <
+      // x is supposed to always be < 1.0
       if(x == 1.0f) {
         printf("ofRandomuf() returned %f after %d calls\n", x, n);
         n = 0;
