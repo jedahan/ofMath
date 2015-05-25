@@ -3,8 +3,31 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-float ofRandomuf(){
-  return rand() / static_cast<double>(RAND_MAX) + 1.0;
+#define MAX(x,y) (((x) > (y)) ? (x) : (y))
+#define MIN(x,y) (((x) < (y)) ? (x) : (y))
+
+float ofRandom(float x, float y) {
+    // if there is no range, return the value
+    if (x == y) return x;
+    float high = MAX(x,y);
+    float low = MIN(x,y);
+    float range = high - low;
+    float denominator = RAND_MAX / range;
+    float result = rand() / denominator;
+    result -= low;
+    if(result == high) {
+        return ofRandom(x, y);
+    } else {
+        return result;
+    }
+}
+
+float ofRandom(float max) {
+    return ofRandom(0, max);
+}
+
+float ofRandomuf() {
+    return ofRandom(+1);
 }
 
 void ofRandomufTest() {
